@@ -1,0 +1,181 @@
+diff --git a/src/Makefile b/src/Makefile
+index 3dff258..9ad4f87 100644
+--- a/src/Makefile
++++ b/src/Makefile
+@@ -11,7 +11,7 @@ DEVICE  = attiny44
+ F_CPU   = 1000000	# in Hz
+ FUSE_L  = 0xE2# see below for fuse values for particular devices
+ FUSE_H  = 0xDE
+-AVRDUDE = avrdude -c usbasp -P usb -p $(DEVICE) # edit this line for your programmer
++AVRDUDE = avrdude -c usbtiny -p $(DEVICE) # edit this line for your programmer
+ 
+ CFLAGS  = -Iusbdrv -I. -DDEBUG_LEVEL=0  -Os 
+ CFLAGS += -ffunction-sections -fdata-sections -save-temps 
+diff --git a/src/main.c b/src/main.c
+index 901b64d..a853b7b 100644
+--- a/src/main.c
++++ b/src/main.c
+@@ -25,11 +25,10 @@ void inline initBuzzer() {
+     TCCR0A |= _BV(WGM00); //PWM, Phase Correct, 8-bit 
+     TCCR0B |= _BV(CS00); //start timer
+ }
+-
+ void inline static beep() {
+     initBuzzer();
+-    OCR0B = 48;
+-    _delay_ms(42);
++    OCR0B = 60;
++    _delay_ms(50);
+     TCCR0B = 0; //stop timer
+     PORTA &= ~_BV(BUZZER);
+ }
+@@ -49,11 +48,20 @@ void static chirp(uint8_t times) {
+     PRR &= ~_BV(PRTIM0);
+     while (times-- > 0) {
+         beep();
+-        _delay_ms(40);
++        _delay_ms(100);
+     }
+     PRR |= _BV(PRTIM0);
+ }
+ 
++void blink(int count) {
++    while(count >= 0){
++        ledOn();
++        _delay_ms(100);
++        ledOff();
++        count--;
++    }
++}
++
+ //------------------- initialization/setup-------------------
+ 
+ void inline setupGPIO() {
+@@ -83,7 +91,7 @@ void inline setupPowerSaving() {
+     PRR |= _BV(PRUSI);
+ }
+ 
+-//--------------- sleep / wakeup routines --------------
++/*//--------------- sleep / wakeup routines --------------*/
+ 
+ void inline initWatchdog() {
+     WDTCSR |= _BV(WDCE);
+@@ -256,10 +264,6 @@ void loopSensorMode() {
+             } else if(0x04 == usiRx) {
+                 usiTwiTransmitByte(light >> 8);
+                 usiTwiTransmitByte(light & 0x00FF);
+-			} else {
+-//				while(usiTwiDataInReceiveBuffer()) {
+-//					usiTwiReceiveByte();//clean up the receive buffer
+-//				}
+             }
+         }
+     }
+@@ -285,9 +289,7 @@ uint8_t mode;
+ uint8_t sleepSeconds = 0;
+ uint32_t secondsAfterWatering = 0;
+ 
+-/**
+- * Sets wake up interval to 8s
+- **/
++//Sets wake up interval to 8s
+ void inline wakeUpInterval8s() {
+     WDTCSR &= ~_BV(WDP1);
+     WDTCSR &= ~_BV(WDP2);
+@@ -295,9 +297,7 @@ void inline wakeUpInterval8s() {
+     sleepSeconds = 8;
+ }
+ 
+-/**
+- * Sets wake up interval to 1s
+- **/
++//Sets wake up interval to 1s
+ void inline wakeUpInterval1s() {
+     WDTCSR &= ~_BV(WDP3);
+     WDTCSR &= ~_BV(WDP0);
+@@ -310,18 +310,33 @@ uint16_t lightThreshold = 65530;
+ void inline static chirpIfLight() {
+     getLight();
+     if(lightCounter < lightThreshold) {
+-        chirp(3);
++        chirp(1);_delay_ms(500);
++        blink(1);_delay_ms(100);
++        blink(1);_delay_ms(100);
++        blink(1);_delay_ms(100);
++
++        chirp(1);_delay_ms(500);
++        blink(1);_delay_ms(100);
++        blink(1);_delay_ms(100);
++        blink(1);_delay_ms(100);
++
++        chirp(1);_delay_ms(500);
++        blink(1);_delay_ms(100);
++        blink(1);_delay_ms(100);
++        blink(1);_delay_ms(100);
++
+     } else {
+-        ledOn();
+-        _delay_ms(10);
+-        ledOff();
++        blink(1);_delay_ms(100);
++        blink(1);_delay_ms(100);
++        blink(1);_delay_ms(100);
++        _delay_ms(2000);
+     }
+ }
+ 
++
+ uint8_t isLightNotCalibrated() {
+     return 65535 == lightThreshold;
+ }
+-
+ //-----------------------------------------------------------------
+ 
+ int main (void) {
+@@ -341,20 +356,19 @@ int main (void) {
+ 
+     sei();
+ 
+-    ledOn();
+-    chirp(2);
+-    ledOff();
+-    _delay_ms(500);
+-
+     getLight();
+     if(isLightNotCalibrated()) {
+-//        getLight();
+         lightThreshold = lightCounter - lightCounter / 10;
+         eeprom_write_word((uint16_t*)0x02, lightThreshold);
+-        chirp(1);
+-        _delay_ms(300);
++
++        chirp(1);_delay_ms(100);
++        chirp(1);_delay_ms(100);
++        blink(1);_delay_ms(500);
++
++        chirp(1);_delay_ms(100);
++        chirp(1);_delay_ms(100);
++        blink(1);_delay_ms(500);
+     }
+-    chirp(2);
+ 
+     if(usiTwiDataInReceiveBuffer()){
+         loopSensorMode();
+@@ -390,11 +404,12 @@ int main (void) {
+             capacitanceDiff = referenceCapacitance - currCapacitance;
+ 
+             if (!playedHappy && ((int16_t)lastCapacitance - (int16_t)currCapacitance) < -5 && lastCapacitance !=0) {
+-                chirp(9);
+-                _delay_ms(350);
+-                chirp(1);
+-                _delay_ms(50);
+-                chirp(1);
++                chirp(1);_delay_ms(200);
++                chirp(1);_delay_ms(200);
++                chirp(1);_delay_ms(300);
++                chirp(2);_delay_ms(500);
++                chirp(1);_delay_ms(250);
++                chirp(1);_delay_ms(250);
+                 playedHappy = 1;
+             }
+ 

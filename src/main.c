@@ -21,51 +21,59 @@ void inline initBuzzer() {
     TCCR0A = 0; //reset timer1 configuration
     TCCR0B = 0;
 
-    TCCR0A |= _BV(COM0B1);  //Clear OC0B on Compare Match when up-counting. Set OC0B on Compare Match when down-counting.
-    TCCR0A |= _BV(WGM00);   //PWM, Phase Correct, 8-bit 
-    TCCR0B |= _BV(CS00);    //start timer
+    TCCR0A |= _BV(COM0B1); //Clear OC0B on Compare Match when up-counting. Set OC0B on Compare Match when down-counting.
+    TCCR0A |= _BV(WGM00); //PWM, Phase Correct, 8-bit 
+    TCCR0B |= _BV(CS00); //start timer
 }
-
 void inline static beep() {
     initBuzzer();
-    OCR0B = 48;
-    _delay_ms(42);
-    TCCR0B = 0;    //stop timer
+    OCR0B = 60;
+    _delay_ms(50);
+    TCCR0B = 0; //stop timer
     PORTA &= ~_BV(BUZZER);
 }
 
 void inline ledOn() {
-  DDRB |= _BV(LED_A) | _BV(LED_K); //forward bias the LED
-  PORTB &= ~_BV(LED_K);            //flash it to discharge the PN junction capacitance
-  PORTB |= _BV(LED_A);  
+    DDRB |= _BV(LED_A) | _BV(LED_K); //forward bias the LED
+    PORTB &= ~_BV(LED_K);            //flash it to discharge the PN junction capacitance
+    PORTB |= _BV(LED_A);  
 }
 
 void inline ledOff() {
-  DDRB &= ~(_BV(LED_A) | _BV(LED_K)); //make pins inputs
-  PORTB &= ~(_BV(LED_A) | _BV(LED_K));//disable pullups
+    DDRB &= ~(_BV(LED_A) | _BV(LED_K)); //make pins inputs
+    PORTB &= ~(_BV(LED_A) | _BV(LED_K));//disable pullups
 }
 
 void static chirp(uint8_t times) {
     PRR &= ~_BV(PRTIM0);
     while (times-- > 0) {
         beep();
-        _delay_ms(40);
+        _delay_ms(100);
     }
     PRR |= _BV(PRTIM0);
+}
+
+void blink(int count) {
+    while(count >= 0){
+        ledOn();
+        _delay_ms(100);
+        ledOff();
+        count--;
+    }
 }
 
 //------------------- initialization/setup-------------------
 
 void inline setupGPIO() {
     PORTA |= _BV(PA0);  //nothing
-    PORTA &= ~_BV(PA0);                     
+    PORTA &= ~_BV(PA0);
     PORTA |= _BV(PA2);  //nothing
-    PORTA &= ~_BV(PA2);                     
+    PORTA &= ~_BV(PA2);
     PORTA |= _BV(PA3);  //nothing
-    PORTA &= ~_BV(PA3);                     
+    PORTA &= ~_BV(PA3);
     DDRA |= _BV(BUZZER);   //piezo buzzer
     PORTA &= ~_BV(BUZZER);
-    
+
     DDRB |= _BV(PB0);   //nothing
     PORTB &= ~_BV(PB0);
     DDRB |= _BV(PB1);   //nothing
@@ -75,15 +83,15 @@ void inline setupGPIO() {
 }
 
 void inline setupPowerSaving() {
-    DIDR0 |= _BV(ADC1D);   //disable digital input buffer on AIN0 and AIN1
-    PRR |= _BV(PRTIM1);                 //disable timer1
-    PRR |= _BV(PRTIM0);                 //disable timer0
+    DIDR0 |= _BV(ADC1D); //disable digital input buffer on AIN0 and AIN1
+    PRR |= _BV(PRTIM1); //disable timer1
+    PRR |= _BV(PRTIM0); //disable timer0
     ADCSRA &=~ _BV(ADEN);
     PRR |= _BV(PRADC);
     PRR |= _BV(PRUSI);
 }
 
-//--------------- sleep / wakeup routines --------------
+/*//--------------- sleep / wakeup routines --------------*/
 
 void inline initWatchdog() {
     WDTCSR |= _BV(WDCE);
@@ -93,13 +101,13 @@ void inline initWatchdog() {
 }
 
 ISR(WATCHDOG_vect ) {
-   // nothing, just wake up
+    // nothing, just wake up
 }
 
 void inline sleep() {
     set_sleep_mode(SLEEP_MODE_PWR_DOWN);
     sleep_enable();
-    MCUCR |= _BV(BODS) | _BV(BODSE);    //disable brownout detection during sleep
+    MCUCR |= _BV(BODS) | _BV(BODSE); //disable brownout detection during sleep
     MCUCR &=~ _BV(BODSE);
     sleep_cpu();
     sleep_disable();
@@ -111,55 +119,55 @@ void inline sleepWhileADC() {
 }
 
 ISR(ADC_vect) { 
-	//nothing, just wake up
+    //nothing, just wake up
 }
 
 // ------------------ capacitance measurement ------------------
 
 void startExcitationSignal() {
-	OCR0A = 0;
-	TCCR0A = _BV(COM0A0) |  //Toggle OC0A on Compare Match
-			_BV(WGM01);
-	TCCR0B = _BV(CS00);
+    OCR0A = 0;
+    TCCR0A = _BV(COM0A0) |  //Toggle OC0A on Compare Match
+        _BV(WGM01);
+    TCCR0B = _BV(CS00);
 }
 
 void stopExcitationSignal() {
-	TCCR0B = 0;
-	TCCR0A = 0;
+    TCCR0B = 0;
+    TCCR0A = 0;
 }
 
 uint16_t getADC1() {
     ADCSRA |= _BV(ADPS2); //adc clock speed = sysclk/16
     ADCSRA |= _BV(ADIE);
     ADMUX |= _BV(MUX0); //select ADC1 as input
-    
+
     ADCSRA |= _BV(ADSC); //start conversion
-    
+
     // sleepWhileADC();
     loop_until_bit_is_clear(ADCSRA, ADSC);
 
     uint16_t result = ADCL;
     result |= ADCH << 8;
-    
+
     return 1023 - result;
 }
 
 uint16_t getCapacitance() {
     PRR &= ~_BV(PRADC);  //enable ADC in power reduction
     ADCSRA |= _BV(ADEN);
-    
+
     PRR &= ~_BV(PRTIM0);
-	startExcitationSignal();
+    startExcitationSignal();
 
     // _delay_ms(1);
     getADC1();
     // _delay_ms(1);
     uint16_t result = getADC1();
-    
+
     stopExcitationSignal();
     PORTB &= ~_BV(PB2);
     PRR |= _BV(PRTIM0);
-    
+
     ADCSRA &=~ _BV(ADEN);
     PRR |= _BV(PRADC);
 
@@ -173,7 +181,7 @@ volatile uint8_t lightCycleOver = 0;
 
 ISR(PCINT1_vect) {
     GIMSK &= ~_BV(PCIE1);//disable pin change interrupts
-    TCCR1B = 0;			 //stop timer
+    TCCR1B = 0; //stop timer
     lightCounter = TCNT1;
     lightCycleOver = 1;
 }
@@ -185,32 +193,32 @@ ISR(TIM1_OVF_vect) {
 
 uint16_t getLight() {
     PRR &= ~_BV(PRTIM1);
-    TIMSK1 |= _BV(TOIE1); 				//enable timer overflow interrupt
-    
-    DDRB |= _BV(LED_A) | _BV(LED_K); 	//forward bias the LED
-    PORTB &= ~_BV(LED_K);            	//flash it to discharge the PN junction capacitance
+    TIMSK1 |= _BV(TOIE1); //enable timer overflow interrupt
+
+    DDRB |= _BV(LED_A) | _BV(LED_K); //forward bias the LED
+    PORTB &= ~_BV(LED_K); //flash it to discharge the PN junction capacitance
     PORTB |= _BV(LED_A);
 
-    PORTB |= _BV(LED_K);            	//reverse bias LED to charge capacitance in it
+    PORTB |= _BV(LED_K); //reverse bias LED to charge capacitance in it
     PORTB &= ~_BV(LED_A);
-    
-    DDRB &= ~_BV(LED_K);                //make Cathode input
+
+    DDRB &= ~_BV(LED_K); //make Cathode input
     PORTB &= ~(_BV(LED_A) | _BV(LED_K));//disable pullups
-    
+
     TCNT1 = 0;
     TCCR1A = 0;
-    TCCR1B = _BV(CS12);					//start timer1 with prescaler clk/256
-    
-    PCMSK1 |= _BV(PCINT8); 				//enable pin change interrupt on LED_K
-    GIMSK |= _BV(PCIE1); 
+    TCCR1B = _BV(CS12); //start timer1 with prescaler clk/256
+
+    PCMSK1 |= _BV(PCINT8); //enable pin change interrupt on LED_K
+    GIMSK |= _BV(PCIE1);
     lightCycleOver = 0;
     while(!lightCycleOver) {
-      set_sleep_mode(SLEEP_MODE_IDLE);
-      sleep_mode();
+        set_sleep_mode(SLEEP_MODE_IDLE);
+        sleep_mode();
     }
-    
+
     TCCR1B = 0;
-    
+
     GIMSK &= ~_BV(PCIE1);
     PCMSK1 &= ~_BV(PCINT8);
     TIMSK1 &= ~_BV(TOIE1);
@@ -226,43 +234,39 @@ void loopSensorMode() {
     ADMUX |= _BV(MUX0); //select ADC1 as input
     PRR &= ~_BV(PRTIM0);
 
-	startExcitationSignal();
-	_delay_ms(500);
-	uint16_t currCapacitance = 0;
-	uint16_t light = 0;
+    startExcitationSignal();
+    _delay_ms(500);
+    uint16_t currCapacitance = 0;
+    uint16_t light = 0;
 
-	while(1) {
-	    if(usiTwiDataInReceiveBuffer()) {
-			uint8_t usiRx = usiTwiReceiveByte();
-			if(0 == usiRx) {
-				ledOn();
-				currCapacitance = getCapacitance();
-			    usiTwiTransmitByte(currCapacitance >> 8);
-				usiTwiTransmitByte(currCapacitance &0x00FF);
-				ledOff();
-			} else if(0x01 == usiRx) {
-				uint8_t newAddress = usiTwiReceiveByte();
-				// 1st bit is reserved for protocol.
-				// Several addresses in the 7-bit range are reserved
-				// https://www.nxp.com/docs/en/user-guide/UM10204.pdf
-				if(newAddress >= 8 && newAddress <= 123) {
-					eeprom_write_byte((uint8_t*)0x01, newAddress);
-				}
-			} else if(0x02 == usiRx) {
-				uint8_t newAddress = eeprom_read_byte((uint8_t*) 0x01);
-				usiTwiTransmitByte(newAddress);
-			} else if(0x03 == usiRx) {
-				light = getLight();
-			} else if(0x04 == usiRx) {
-				usiTwiTransmitByte(light >> 8);
-				usiTwiTransmitByte(light & 0x00FF);
-			} else {
-//				while(usiTwiDataInReceiveBuffer()) {
-//					usiTwiReceiveByte();//clean up the receive buffer
-//				}
-			}
-		}
-	}
+    while(1) {
+        if(usiTwiDataInReceiveBuffer()) {
+            uint8_t usiRx = usiTwiReceiveByte();
+            if(0 == usiRx) {
+                ledOn();
+                currCapacitance = getCapacitance();
+                usiTwiTransmitByte(currCapacitance >> 8);
+                usiTwiTransmitByte(currCapacitance &0x00FF);
+                ledOff();
+            } else if(0x01 == usiRx) {
+                uint8_t newAddress = usiTwiReceiveByte();
+                // 1st bit is reserved for protocol.
+                // Several addresses in the 7-bit range are reserved
+                // https://www.nxp.com/docs/en/user-guide/UM10204.pdf
+                if(newAddress >= 8 && newAddress <= 123) {
+                    eeprom_write_byte((uint8_t*)0x01, newAddress);
+                }
+            } else if(0x02 == usiRx) {
+                uint8_t newAddress = eeprom_read_byte((uint8_t*) 0x01);
+                usiTwiTransmitByte(newAddress);
+            } else if(0x03 == usiRx) {
+                light = getLight();
+            } else if(0x04 == usiRx) {
+                usiTwiTransmitByte(light >> 8);
+                usiTwiTransmitByte(light & 0x00FF);
+            }
+        }
+    }
 }
 
 // --------------- chirp FSM states and utilities-----------------
@@ -285,9 +289,7 @@ uint8_t mode;
 uint8_t sleepSeconds = 0;
 uint32_t secondsAfterWatering = 0;
 
-/**
- * Sets wake up interval to 8s
- **/
+//Sets wake up interval to 8s
 void inline wakeUpInterval8s() {
     WDTCSR &= ~_BV(WDP1);
     WDTCSR &= ~_BV(WDP2);
@@ -295,9 +297,7 @@ void inline wakeUpInterval8s() {
     sleepSeconds = 8;
 }
 
-/**
- * Sets wake up interval to 1s
- **/
+//Sets wake up interval to 1s
 void inline wakeUpInterval1s() {
     WDTCSR &= ~_BV(WDP3);
     WDTCSR &= ~_BV(WDP0);
@@ -310,26 +310,41 @@ uint16_t lightThreshold = 65530;
 void inline static chirpIfLight() {
     getLight();
     if(lightCounter < lightThreshold) {
-        chirp(3);
+        chirp(1);_delay_ms(500);
+        blink(1);_delay_ms(100);
+        blink(1);_delay_ms(100);
+        blink(1);_delay_ms(100);
+
+        chirp(1);_delay_ms(500);
+        blink(1);_delay_ms(100);
+        blink(1);_delay_ms(100);
+        blink(1);_delay_ms(100);
+
+        chirp(1);_delay_ms(500);
+        blink(1);_delay_ms(100);
+        blink(1);_delay_ms(100);
+        blink(1);_delay_ms(100);
+
     } else {
-        ledOn();
-        _delay_ms(10);
-        ledOff();
+        blink(1);_delay_ms(100);
+        blink(1);_delay_ms(100);
+        blink(1);_delay_ms(100);
+        _delay_ms(2000);
     }
 }
+
 
 uint8_t isLightNotCalibrated() {
     return 65535 == lightThreshold;
 }
-
 //-----------------------------------------------------------------
 
 int main (void) {
-	setupGPIO();
+    setupGPIO();
 
-	uint8_t address = eeprom_read_byte((uint8_t*)0x01);
+    uint8_t address = eeprom_read_byte((uint8_t*)0x01);
     if(0 == address || 255 == address) {
-    	address = 0x20;
+        address = 0x20;
     }
 
     usiTwiSlaveInit(address);
@@ -340,27 +355,26 @@ int main (void) {
     CLKPR = _BV(CLKPS1); //clock speed = clk/4 = 2Mhz
 
     sei();
-    
-    ledOn();
-    chirp(2);
-    ledOff();
-    _delay_ms(500);
 
     getLight();
     if(isLightNotCalibrated()) {
-//        getLight();
         lightThreshold = lightCounter - lightCounter / 10;
         eeprom_write_word((uint16_t*)0x02, lightThreshold);
-        chirp(1);
-        _delay_ms(300);
+
+        chirp(1);_delay_ms(100);
+        chirp(1);_delay_ms(100);
+        blink(1);_delay_ms(500);
+
+        chirp(1);_delay_ms(100);
+        chirp(1);_delay_ms(100);
+        blink(1);_delay_ms(500);
     }
-    chirp(2);
 
     if(usiTwiDataInReceiveBuffer()){
-		loopSensorMode();
-	}
+        loopSensorMode();
+    }
 
-	uint16_t referenceCapacitance = getCapacitance();
+    uint16_t referenceCapacitance = getCapacitance();
 
     USICR = 0;
 
@@ -370,7 +384,7 @@ int main (void) {
 
     uint8_t wakeUpCount = 0;
     uint8_t playedHappy = 0;
-    
+
     uint8_t state = STATE_PANIC;
     int16_t capacitanceDiff = 0;
     uint8_t maxSleepTimes = 0;
@@ -382,22 +396,23 @@ int main (void) {
             sleep();
             wakeUpCount++;
         } else {
-        	secondsAfterWatering = maxSleepTimes * sleepSeconds;
+            secondsAfterWatering = maxSleepTimes * sleepSeconds;
 
             wakeUpCount = 0;
             lastCapacitance = currCapacitance;
             currCapacitance = getCapacitance();
             capacitanceDiff = referenceCapacitance - currCapacitance;
-            
+
             if (!playedHappy && ((int16_t)lastCapacitance - (int16_t)currCapacitance) < -5 && lastCapacitance !=0) {
-                chirp(9);
-                _delay_ms(350);
-                chirp(1);
-                _delay_ms(50);
-                chirp(1);
+                chirp(1);_delay_ms(200);
+                chirp(1);_delay_ms(200);
+                chirp(1);_delay_ms(300);
+                chirp(2);_delay_ms(500);
+                chirp(1);_delay_ms(250);
+                chirp(1);_delay_ms(250);
                 playedHappy = 1;
             }
-                        
+
             if(capacitanceDiff <= -5) {
                 if(STATE_HIBERNATE != state) {
                     wakeUpInterval8s();
